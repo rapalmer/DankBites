@@ -43,6 +43,7 @@ exports.resize = async (req, res, next) => {
 };
 
 exports.createStore = async (req, res) => {
+	req.body.author = req.user._id;
 	const store = await (new Store(req.body)).save();
 	await store.save();
 	req.flash('success', `Successfully Created ${store.name}. Care to leave a review?`);
@@ -55,11 +56,17 @@ exports.getStores = async (req, res) => {
 	res.render('stores', { title: 'Stores', stores });
 };
 
+const confirmOwner = (store, user) => {
+	if(!store.author.equals(user._id)) {
+		throw Error('You must be the store owner to edit.');
+	}
+};
+
 exports.editStore = async (req, res) => {
 	// 1. Find store given the ID
 	const store = await Store.findOne({ _id: req.params.id });
 	// 2. Confirm they are the owner
-	// TODO
+	confirmOwner(store, req.user);
 	// 3. Render the edit form so edits can be made
 	res.render('editStore', { title: `Edit ${store.name}`, store });
 };
@@ -77,7 +84,7 @@ exports.updateStore = async (req, res) => {
 };
 
 exports.getStoreBySlug = async (req, res) => {
-	const store = await Store.findOne({ slug: req.params.slug });
+	const store = await Store.findOne({ slug: req.params.slug }).populate('author');
 	if(!store) return next();
 	res.render('store', { store, title: store.name });
 };
@@ -91,4 +98,41 @@ exports.getStoresByTag = async (req, res) => {
 
 
 	res.render('tag', { tags, title: 'Tags', tag, stores });
+};
+
+exports.searchStores = async (req, res) => {
+	const stores = await Store
+	// Find all stores that match
+	.find({
+		$text: {
+			$search: req.query.q,
+		}
+	}, {
+		score: { $meta: 'textScore' }
+	})
+	// Let mongodb sort them using textScore metadata
+	.sort({
+		score: { $meta: 'textScore' }
+	})
+	// Limit to only a small number (e.g. 5)
+	.limit(5);
+	res.json(stores);
+};
+
+exports.mapStores = async (req, res) => {
+	const coordinates = [req.query.lng, req.query.lat].map(parseFloat);
+	const q = {
+		location: {
+			$near: {
+				$geometry: {
+					type: 'Point',
+					coordinates
+				},
+				$maxDistance: 10000 // 10km
+			}
+		}
+	};
+
+	const stores = await Store.find(q).select('slug name description location').limit(10);
+	res.json(stores);
 };
