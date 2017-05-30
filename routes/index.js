@@ -8,6 +8,7 @@ const { catchErrors } = require('../handlers/errorHandlers');
 router.get('/', catchErrors(storeController.getStores));
 router.get('/stores', catchErrors(storeController.getStores));
 router.get('/add', authController.isLoggedIn, storeController.addStore);
+router.get('/map', storeController.mapPage);
 
 router.post('/add', 
 	storeController.upload,
